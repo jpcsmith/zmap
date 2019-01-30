@@ -228,7 +228,7 @@ int chlo_quic_make_packet(void *buf, UNUSED size_t *buf_len, ipaddr_n_t src_ip, 
 	common_hdr->public_flags = PUBLIC_FLAG_HAS_VERS | PUBLIC_FLAG_8BYTE_CONN_ID;
 	// this should be unique
 	common_hdr->connection_id = connection_id;
-	common_hdr->quic_version = MakeQuicTag('Q', '0', '3', '4');
+	common_hdr->quic_version = MakeQuicTag('Q', '0', '9', '8');
 	common_hdr->seq_num = 1;
 	// Fill the hash later, but don't hash the hash itself
 	memset(common_hdr->fnv1a_hash, 0, sizeof(common_hdr->fnv1a_hash));
@@ -266,7 +266,7 @@ int chlo_quic_make_packet(void *buf, UNUSED size_t *buf_len, ipaddr_n_t src_ip, 
 //	printf("PADDING LENGTH: %d\n", pad_len);
 	payload_len += pad_len;
 	value_data += pad_len;
-	*((uint32_t*)value_data) = MakeQuicTag('Q', '0', '3', '4');
+	*((uint32_t*)value_data) = MakeQuicTag('Q', '0', '9', '8');
 	payload_len += sizeof(uint32_t);
 
 
@@ -337,7 +337,7 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len, fieldse
                             char* versions = malloc(num_versions * sizeof(uint32_t) + (num_versions-1)*2 + 1);
                             int next_ver = 0;
 
-                            if (*((uint32_t*)&vers->versions[0]) == MakeQuicTag('Q', '0', '3', '4')) {
+                            if (*((uint32_t*)&vers->versions[0]) == MakeQuicTag('Q', '0', '9', '8')) {
                                 // someone replied with our own version... probalby UDP echo
                                 fs_modify_string(fs, "classification", (char*) "udp", 0);
                                 fs_modify_uint64(fs, "success", 0);
