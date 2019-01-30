@@ -42,6 +42,7 @@ static inline uint32_t MakeQuicTag(char a, char b, char c, char d) {
 		(uint32_t)(d) << 24;
 }
 
+#define QUIC_HDR_LEN_BASE 14
 #define QUIC_HDR_LEN_HASH 26
 typedef struct {
 	uint8_t public_flags;   // should be 0x01 | 0x0C  during sending and should not contain version on recv.
@@ -52,10 +53,6 @@ typedef struct {
 	uint32_t quic_version; // should be MakeQuicTag('Q', '0', '2', '5') but server may provide list
 	uint8_t seq_num;		// must start with 1, increases strictly monotonic by one
 	uint8_t fnv1a_hash[12];  // 12 byte fnv1a hash
-#define PRIVATE_FLAG_NOTHING 0x00
-#define PRIVATE_FLAG_HAS_ENTROPY 0x01
-#define PRIVATE_FLAG_HAS_FEC_GROUP 0x02
-#define PRIVATE_FLAG_IS_FEC 0x04
 } __attribute__ ((__packed__)) quic_common_hdr;
 
 
@@ -99,7 +96,7 @@ typedef struct {
 } quic_stream_frame_packet;
 
 
-#define CLIENTHELLO_MIN_SIZE (1024 - INCHOATE_CHLO_LEN)
+#define CLIENTHELLO_MIN_SIZE (1350 - INCHOATE_CHLO_LEN)
 
 
 static int num_ports;
@@ -231,7 +228,7 @@ int chlo_quic_make_packet(void *buf, UNUSED size_t *buf_len, ipaddr_n_t src_ip, 
 	common_hdr->public_flags = PUBLIC_FLAG_HAS_VERS | PUBLIC_FLAG_8BYTE_CONN_ID;
 	// this should be unique
 	common_hdr->connection_id = connection_id;
-	common_hdr->quic_version = MakeQuicTag('Q', '0', '3', '8');
+	common_hdr->quic_version = MakeQuicTag('Q', '0', '3', '4');
 	common_hdr->seq_num = 1;
 	// Fill the hash later, but don't hash the hash itself
 	memset(common_hdr->fnv1a_hash, 0, sizeof(common_hdr->fnv1a_hash));
@@ -240,7 +237,7 @@ int chlo_quic_make_packet(void *buf, UNUSED size_t *buf_len, ipaddr_n_t src_ip, 
 
 	// hash the public header
 	__uint128_t hash = 0;
-	hash = fnv1a_128((uint8_t*)payload, 14);
+	hash = fnv1a_128((uint8_t*)payload, QUIC_HDR_LEN_BASE);
 
 	// add a frame
 	quic_stream_frame_packet* frame = (quic_stream_frame_packet*)(payload + payload_len);
@@ -269,13 +266,13 @@ int chlo_quic_make_packet(void *buf, UNUSED size_t *buf_len, ipaddr_n_t src_ip, 
 //	printf("PADDING LENGTH: %d\n", pad_len);
 	payload_len += pad_len;
 	value_data += pad_len;
-	*((uint32_t*)value_data) = MakeQuicTag('Q', '0', '3', '8');
+	*((uint32_t*)value_data) = MakeQuicTag('Q', '0', '3', '4');
 	payload_len += sizeof(uint32_t);
 
 
-  // TODO: I think this will compute the wrong hash
-	// hash the payload (private + frames), excluding the hash field itself
-	hash = fnv1a_128_inc(hash, (uint8_t*)payload+26, payload_len-26);
+	// hash the payload frames, excluding the hash field itself
+	hash = fnv1a_128_inc(hash, (uint8_t*)payload+QUIC_HDR_LEN_HASH,
+                       payload_len-QUIC_HDR_LEN_HASH);
 
 	uint8_t serializedHash[12];
 	serializeHash(hash, serializedHash);
@@ -340,7 +337,7 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len, fieldse
                             char* versions = malloc(num_versions * sizeof(uint32_t) + (num_versions-1)*2 + 1);
                             int next_ver = 0;
 
-                            if (*((uint32_t*)&vers->versions[0]) == MakeQuicTag('Q', '0', '3', '8')) {
+                            if (*((uint32_t*)&vers->versions[0]) == MakeQuicTag('Q', '0', '3', '4')) {
                                 // someone replied with our own version... probalby UDP echo
                                 fs_modify_string(fs, "classification", (char*) "udp", 0);
                                 fs_modify_uint64(fs, "success", 0);
