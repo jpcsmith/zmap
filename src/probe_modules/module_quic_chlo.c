@@ -42,12 +42,12 @@ static inline uint32_t MakeQuicTag(char a, char b, char c, char d) {
 		(uint32_t)(d) << 24;
 }
 
-#define QUIC_HDR_LEN_HASH 27
+#define QUIC_HDR_LEN_HASH 26
 typedef struct {
 	uint8_t public_flags;   // should be 0x01 | 0x0C  during sending and should not contain version on recv.
 #define PUBLIC_FLAG_HAS_VERS 0x01
 #define PUBLIC_FLAG_HAS_RST 0x02
-#define PUBLIC_FLAG_8BYTE_CONN_ID 0x0C
+#define PUBLIC_FLAG_8BYTE_CONN_ID 0x08
 	uint64_t connection_id; // unique!
 	uint32_t quic_version; // should be MakeQuicTag('Q', '0', '2', '5') but server may provide list
 	uint8_t seq_num;		// must start with 1, increases strictly monotonic by one
@@ -56,7 +56,6 @@ typedef struct {
 #define PRIVATE_FLAG_HAS_ENTROPY 0x01
 #define PRIVATE_FLAG_HAS_FEC_GROUP 0x02
 #define PRIVATE_FLAG_IS_FEC 0x04
-	uint8_t private_flags;  // 0 or 1
 } __attribute__ ((__packed__)) quic_common_hdr;
 
 
@@ -93,7 +92,7 @@ typedef struct {
 							  //                   1  | FIN  | Data Len Present |
 								//                offset (0,16,24,32,40,48,56,64) |
 								//					len stream id (8,16,24,32)
-	
+
 	uint8_t stream_id;
 #define FRAME_STREAM_CRYPTO_STREAM 0x01
 	uint16_t data_len;			// len of data
@@ -121,7 +120,7 @@ void chlo_quic_set_num_ports(int x)
 
 int chlo_quic_global_initialize(struct state_conf *conf) {
 	num_ports = conf->source_port_last - conf->source_port_first + 1;
-	
+
 	char port[16];
 	sprintf(port, "%d", conf->target_port);
 	// answers have the target port as source
@@ -129,7 +128,7 @@ int chlo_quic_global_initialize(struct state_conf *conf) {
 
 	module_quic_chlo.pcap_filter = strncat(filter_rule, port, 16);
 	module_quic_chlo.pcap_snaplen = sizeof(struct ether_header) + sizeof(struct ip) + sizeof(struct udphdr) + QUIC_HDR_LEN_HASH + STREAM_FRAME_LEN + INCHOATE_CHLO_LEN + CLIENTHELLO_MIN_SIZE;
-	
+
 	connection_id = MakeQuicTag('S', 'C', 'A', 'N')  | ((uint64_t)MakeQuicTag('N', 'I', 'N', 'G')) << 32;
 	checker_bitmap = pbm_init();
 	return EXIT_SUCCESS;
@@ -169,7 +168,7 @@ int chlo_quic_init_perthread(void* buf, macaddr_t *src,
 	assert(module_quic_chlo.packet_length <= MAX_PACKET_SIZE);
 	memset(payload, 0, udp_send_msg_len);
 
-	
+
 	// Seed our random number generator with the global generator
 	/*
      uint32_t seed = aesrand_getword(zconf.aes);
@@ -185,13 +184,13 @@ __uint128_t fnv1a_128_inc(__uint128_t hash, const uint8_t* data, size_t len) {
 	__uint128_t FNV_primeHI = 16777216;
 	__uint128_t FNV_primeLO = 315;
 	__uint128_t FNV_prime = FNV_primeHI << 64 | FNV_primeLO;
-	
-	
+
+
 	for(size_t i = 0; i < len; i++) {
 		hash = hash ^ (__uint128_t)data[i];
 		hash = hash * FNV_prime;
 	}
-	
+
 	return hash;
 }
 
@@ -232,14 +231,13 @@ int chlo_quic_make_packet(void *buf, UNUSED size_t *buf_len, ipaddr_n_t src_ip, 
 	common_hdr->public_flags = PUBLIC_FLAG_HAS_VERS | PUBLIC_FLAG_8BYTE_CONN_ID;
 	// this should be unique
 	common_hdr->connection_id = connection_id;
-	common_hdr->quic_version = MakeQuicTag('Q', '0', '0', '1');
+	common_hdr->quic_version = MakeQuicTag('Q', '0', '3', '8');
 	common_hdr->seq_num = 1;
 	// Fill the hash later, but don't hash the hash itself
 	memset(common_hdr->fnv1a_hash, 0, sizeof(common_hdr->fnv1a_hash));
-	common_hdr->private_flags = PRIVATE_FLAG_HAS_ENTROPY; // has entropy ...
 	payload_len += QUIC_HDR_LEN_HASH;
-	
-	
+
+
 	// hash the public header
 	__uint128_t hash = 0;
 	hash = fnv1a_128((uint8_t*)payload, 14);
@@ -248,11 +246,11 @@ int chlo_quic_make_packet(void *buf, UNUSED size_t *buf_len, ipaddr_n_t src_ip, 
 	quic_stream_frame_packet* frame = (quic_stream_frame_packet*)(payload + payload_len);
 	frame->type = FRAME_TYPE_STREAM | FRAME_STREAM_HAS_DATA | FRAME_STREAM_CREATE_SID_LEN(0);
 	frame->stream_id = FRAME_STREAM_CRYPTO_STREAM;
-	
+
 	// there is a minimum length of a hello.. don't know to what that actually referers, total length?
 	int pad_len = (CLIENTHELLO_MIN_SIZE - sizeof(uint32_t));
 	frame->data_len = INCHOATE_CHLO_LEN + pad_len + sizeof(uint32_t);
-	
+
 	payload_len += STREAM_FRAME_LEN;
 
 	quic_inchoate_chlo* chlo = (quic_inchoate_chlo*)(payload + payload_len);
@@ -263,31 +261,32 @@ int chlo_quic_make_packet(void *buf, UNUSED size_t *buf_len, ipaddr_n_t src_ip, 
 	chlo->p_offset = pad_len;		// offset from value start to end+1 of pad
 	chlo->v_tag = MakeQuicTag('V', 'E', 'R', '\0');
 	chlo->v_offset = pad_len + sizeof(uint32_t);
-	
+
 	payload_len += INCHOATE_CHLO_LEN;
-	
+
 	char* value_data = payload + payload_len;
 	memset(value_data, 0x2d, pad_len);
 //	printf("PADDING LENGTH: %d\n", pad_len);
 	payload_len += pad_len;
 	value_data += pad_len;
-	*((uint32_t*)value_data) = MakeQuicTag('Q', '0', '0', '1');
+	*((uint32_t*)value_data) = MakeQuicTag('Q', '0', '3', '8');
 	payload_len += sizeof(uint32_t);
-	
 
+
+  // TODO: I think this will compute the wrong hash
 	// hash the payload (private + frames), excluding the hash field itself
 	hash = fnv1a_128_inc(hash, (uint8_t*)payload+26, payload_len-26);
 
 	uint8_t serializedHash[12];
 	serializeHash(hash, serializedHash);
-	
+
 	memcpy(common_hdr->fnv1a_hash, serializedHash, sizeof(serializedHash));
-	
-	
+
+
 	// Update the IP and UDP headers to match the new payload length
 	ip_header->ip_len   = htons(sizeof(struct ip) + sizeof(struct udphdr) + payload_len);
 	udp_header->uh_ulen = ntohs(sizeof(struct udphdr) + payload_len);
-	
+
 
 	ip_header->ip_sum = 0;
 	ip_header->ip_sum = zmap_ip_checksum((unsigned short *) ip_header);
@@ -299,7 +298,7 @@ void chlo_quic_print_packet(FILE *fp, void* packet)
 {
 	struct ether_header *ethh = (struct ether_header *) packet;
 	struct ip *iph = (struct ip *) &ethh[1];
-    struct udphdr *udph = (struct udphdr*)(&iph[1]); 
+    struct udphdr *udph = (struct udphdr*)(&iph[1]);
 	fprintf(fp, "udp { source: %u | dest: %u | checksum: %u }\n",
 		ntohs(udph->uh_sport),
 		ntohs(udph->uh_dport),
@@ -315,7 +314,7 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len, fieldse
 	if (ip_hdr->ip_p == IPPROTO_UDP) {
 		struct udphdr *udp = (struct udphdr *) ((char *) ip_hdr + ip_hdr->ip_hl * 4);
 
-		
+
 		// Verify that the UDP length is big enough for the header and at least one byte
 		uint16_t data_len = ntohs(udp->uh_ulen);
 		if (data_len > sizeof(struct udphdr)) {
@@ -326,8 +325,8 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len, fieldse
 					fs_add_string(fs, "classification", (char*) "quic", 0);
 					fs_add_uint64(fs, "success", 1);
 				}
-				
-                
+
+
 				// probably we got back a version packet
 				if (data_len < (QUIC_HDR_LEN_HASH + CLIENTHELLO_MIN_SIZE - sizeof(struct udphdr))) {
 					quic_version_neg* vers = (quic_version_neg*)payload;
@@ -340,8 +339,8 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len, fieldse
                             // 4 bytes each + , + [SPACE] + \0
                             char* versions = malloc(num_versions * sizeof(uint32_t) + (num_versions-1)*2 + 1);
                             int next_ver = 0;
-                            
-                            if (*((uint32_t*)&vers->versions[0]) == MakeQuicTag('Q', '0', '0', '1')) {
+
+                            if (*((uint32_t*)&vers->versions[0]) == MakeQuicTag('Q', '0', '3', '8')) {
                                 // someone replied with our own version... probalby UDP echo
                                 fs_modify_string(fs, "classification", (char*) "udp", 0);
                                 fs_modify_uint64(fs, "success", 0);
@@ -359,7 +358,7 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len, fieldse
                             versions[next_ver] = '\0';
                             fs_add_string(fs, "versions", versions, 1);
                             //fs_add_binary(fs, "versions", num_versions * sizeof(uint32_t), vers->versions, 0);
-                            
+
                         }
                     }else if ((vers->public_flags & PUBLIC_FLAG_HAS_RST) > 0) {
                         fs_modify_string(fs, "info", (char*) "RST", 0);
@@ -381,19 +380,19 @@ int chlo_quic_validate_packet(const struct ip *ip_hdr, uint32_t len,
 			// buffer not large enough to contain expected udp header
 			return 0;
 		}
-		
-		
+
+
 		int already_checked = pbm_check(checker_bitmap, ntohl(ip_hdr->ip_src.s_addr));
 		if (already_checked) {
 			return 0;
 		}
-		
+
 		pbm_set(checker_bitmap, ntohl(ip_hdr->ip_src.s_addr));
-		
+
 		return 1;
 	}
 
-	
+
 	return 0;
 }
 
