@@ -8,6 +8,7 @@ include_directories(
 
 # ADD YOUR PROBE MODULE HERE
 set(EXTRA_PROBE_MODULES
+    probe_modules/module_quic_chlo.c
 )
 
 # ADD YOUR OUTPUT MODULE HERE
@@ -38,7 +39,6 @@ set(PROBE_MODULE_SOURCES
     probe_modules/module_upnp.c
     probe_modules/module_dns.c
     probe_modules/module_bacnet.c
-    probe_modules/module_quic_chlo.c
 )
 
 set(SOURCES
@@ -276,3 +276,42 @@ install(
     ztee.1
     DESTINATION share/man/man1
 )
+
+add_executable(test_module_quic_chlo
+    probe_modules/module_quic_chlo_test.c
+    aesrand.c
+    cyclic.c
+    expression.c
+    fieldset.c
+    filter.c
+    get_gateway.c
+    iterator.c
+    monitor.c
+    recv.c
+    send.c
+    shard.c
+    socket.c
+    state.c
+    summary.c
+    utility.c
+    validate.c
+    zopt_compat.c
+    "${CMAKE_CURRENT_BINARY_DIR}/zopt.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/lexer.c"
+    "${CMAKE_CURRENT_BINARY_DIR}/parser.c"
+    ${EXTRA_PROBE_MODULES}
+    ${EXTRA_OUTPUT_MODULES}
+    ${PROBE_MODULE_SOURCES}
+    ${OUTPUT_MODULE_SOURCES}
+    recv-pcap.c
+)
+target_link_libraries(test_module_quic_chlo
+    zmaplib
+    ${PFRING_LIBRARIES}
+    pcap gmp m unistring
+    ${DNET_LIBRARIES}
+    ${REDIS_LIBS}
+    ${JSON_LIBRARIES}
+    unity
+)
+add_test(test_quic_chlo test_module_quic_chlo)
