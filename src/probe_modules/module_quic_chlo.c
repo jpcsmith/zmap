@@ -33,7 +33,9 @@
 #define MAX_UDP_PAYLOAD_LEN 1472
 #define UNUSED __attribute__((unused))
 
-#define BE_INT(a,b,c,d) ((uint32_t)(d) | (uint32_t)(c) << 8 | (uint32_t)(b) << 16 | (uint32_t)(a) << 24)
+#define BE_INT(a, b, c, d)                                                     \
+	((uint32_t)(a) | (uint32_t)(b) << 8 | (uint32_t)(c) << 16 |            \
+	 (uint32_t)(d) << 24)
 
 static inline uint32_t MakeQuicTag(char a, char b, char c, char d)
 {
@@ -42,20 +44,22 @@ static inline uint32_t MakeQuicTag(char a, char b, char c, char d)
 }
 
 /* Public Flags */
-#define PUBLIC_FLAG_HAS_VERS      0x01
-#define PUBLIC_FLAG_HAS_RST       0x02
+#define PUBLIC_FLAG_HAS_VERS 0x01
+#define PUBLIC_FLAG_HAS_RST 0x02
 #define PUBLIC_FLAG_8BYTE_CONN_ID 0x0C
 
 typedef struct {
-	uint8_t public_flags; // should be 0x01 | 0x0C  during sending and should not contain version on recv.
+	uint8_t
+	    public_flags; // should be 0x01 | 0x0C  during sending and should not contain version on recv.
 	uint64_t connection_id; // unique!
 	uint32_t quic_version;
-	uint8_t seq_num; // must start with 1, increases strictly monotonic by one
+	uint8_t
+	    seq_num; // must start with 1, increases strictly monotonic by one
 	uint8_t fnv1a_hash[12]; // 12 byte fnv1a hash
 } __attribute__((__packed__)) quic_common_hdr;
 
-#define QUIC_HDR_LEN_BASE       14
-#define QUIC_HDR_LEN_WITH_HASH  26
+#define QUIC_HDR_LEN_BASE 14
+#define QUIC_HDR_LEN_WITH_HASH 26
 
 typedef struct {
 	uint8_t public_flags;   // should be 0x01 | 0x0C  will have these set
@@ -66,16 +70,15 @@ typedef struct {
 /* The connection ID of the CHLOs. Literal value SCANNING*/
 uint64_t connection_id;
 
-
 /* STREAM Frame Flags and Type */
-#define FRAME_TYPE_STREAM                 0x80
-#define FRAME_STREAM_FIN                  0x40
-#define FRAME_STREAM_HAS_DATA             0x20
-#define FRAME_STREAM_CRYPTO_STREAM        0x01
-#define FRAME_STREAM_GET_OFFSET_LEN(x)    ((x & 0x1C) >> 2)
+#define FRAME_TYPE_STREAM 0x80
+#define FRAME_STREAM_FIN 0x40
+#define FRAME_STREAM_HAS_DATA 0x20
+#define FRAME_STREAM_CRYPTO_STREAM 0x01
+#define FRAME_STREAM_GET_OFFSET_LEN(x) ((x & 0x1C) >> 2)
 #define FRAME_STREAM_CREATE_OFFSET_LEN(x) ((x & 0x07) << 2)
-#define FRAME_STREAM_GET_SID_LEN(x)       ((x & 0x03))
-#define FRAME_STREAM_CREATE_SID_LEN(x)    (x & 0x03)
+#define FRAME_STREAM_GET_SID_LEN(x) ((x & 0x03))
+#define FRAME_STREAM_CREATE_SID_LEN(x) (x & 0x03)
 
 // also memory aligned
 #define STREAM_FRAME_LEN 4
@@ -87,25 +90,30 @@ typedef struct {
 
 static const int chlo_preface_size = 8;
 static const int chlo_udp_payload_size = 1350;
-static const int total_packet_size = sizeof(struct ether_header) +
-    sizeof(struct ip) + sizeof(struct udphdr) + chlo_udp_payload_size;
+static const int stream_frame_len = 1024;
+
+#define TOTAL_PACKET_SIZE                                                      \
+	(sizeof(struct ether_header) + sizeof(struct ip) +                     \
+	 sizeof(struct udphdr) + chlo_udp_payload_size)
 
 enum tag_values {
-  TAG_PAD   = 0x50414400,
-  TAG_VER   = 0x56455200,
-  TAG_PDMD  = 0x50444d44,
-  TAG_SMHL  = 0x534d484c,
-  TAG_ICLS  = 0x4943534c,
-  TAG_MIDS  = 0x4d494453,
-  TAG_SCLS  = 0x53434c53,
-  TAG_CFCW  = 0x43464357,
-  TAG_SFCW  = 0x53464357
+	TAG_PAD = BE_INT('P', 'A', 'D', '\0'),
+	TAG_VER = BE_INT('V', 'E', 'R', '\0'),
+	TAG_PDMD = BE_INT('P', 'D', 'M', 'D'),
+	TAG_SMHL = BE_INT('S', 'M', 'H', 'L'),
+	TAG_MIDS = BE_INT('M', 'I', 'D', 'S'),
+	TAG_ICLS = BE_INT('I', 'C', 'L', 'S'),
+	TAG_SCLS = BE_INT('S', 'C', 'L', 'S'),
+	TAG_CFCW = BE_INT('C', 'F', 'C', 'W'),
+	TAG_SFCW = BE_INT('S', 'F', 'C', 'W')
 };
 
+static const int tag_len = 8;
+
 enum supported_versions {
-  VER_Q039 = 0x51303339,
-  VER_Q042 = 0x51303432,
-  VER_Q043 = 0x51303433,
+	VER_Q039 = BE_INT('Q', '0', '3', '9'),
+	VER_Q042 = BE_INT('Q', '0', '4', '2'),
+	VER_Q043 = BE_INT('Q', '0', '4', '3')
 };
 
 static char filter_rule[32];
@@ -114,19 +122,38 @@ uint8_t **checker_bitmap = NULL;
 
 probe_module_t module_quic_chlo;
 
+int write_chlo(void *buffer, int buffer_len, const tag_info *tags, int num_tags)
+{
+	assert(buffer_len >= chlo_preface_size);
+	assert(num_tags <= UINT16_MAX);
+
+	uint8_t *data_buffer = (uint8_t *)buffer;
+
+	memcpy(&data_buffer[0], "CHLO", 4);
+	*((uint16_t *)&data_buffer[4]) = htole16(num_tags);
+	memset(&data_buffer[6], 0, 2); // Padding
+
+	int tags_size =
+	    pack_tags(tags, num_tags, data_buffer + chlo_preface_size,
+		      buffer_len - chlo_preface_size);
+	assert(tags_size <= UINT16_MAX);
+
+	return chlo_preface_size + tags_size;
+}
+
 int chlo_quic_global_initialize(struct state_conf *conf)
 {
 	num_ports = conf->source_port_last - conf->source_port_first + 1;
-  assert(num_ports == 1);
+	assert(num_ports == 1);
 
 	sprintf(filter_rule, "udp src port %d", conf->target_port);
 	module_quic_chlo.pcap_filter = filter_rule;
 
-  assert(total_packet_size <= MAX_PACKET_SIZE);
-	module_quic_chlo.pcap_snaplen = total_packet_size;
-	module_quic_chlo.packet_length = total_packet_size;
+	assert(TOTAL_PACKET_SIZE <= MAX_PACKET_SIZE);
+	module_quic_chlo.pcap_snaplen = TOTAL_PACKET_SIZE;
+	module_quic_chlo.packet_length = TOTAL_PACKET_SIZE;
 
-  connection_id = htobe64(0x5343414e4e494e47);
+	connection_id = htobe64(0x5343414e4e494e47);
 
 	checker_bitmap = pbm_init();
 
@@ -170,27 +197,47 @@ void serializeHash(__uint128_t hash, uint8_t out_hash[12])
 	memcpy(out_hash, &hash, 12);
 }
 
-
-
-int add_chlo_frames(/*void *buffer, int buffer_len*/) {
-	// TODO: Separate into its own function and test
-	// int num_tags_excluding_pad = 8;
-  // int padding_len = stream_frame_len - (CHLO_PREFACE_SIZE + (num_tags_excluding_pad * 4) + ((num_tags_excluding_pad+1) * 8);
-
-	// tag_info tags[8] = {
-  //     make_pad_tag(stream_frame_length - CHLO_PREFACE_SIZE - (8 * 12)),
-	//     make_raw_tag("VER", "Q043", 4),
-	//     make_raw_tag("PDMD", "X509", 4),
-	//     make_uint32_tag("SMHL", 1),
-	//     make_uint32_tag("ICSL", 600),
-	//     make_uint32_tag("MIDS", 100),
-	//     make_uint32_tag("SCLS", 1),
-	//     make_raw_tag("CFCW", "\0\0\xf0\0", 4), // Use raw as im not
-	//     make_raw_tag("SFCW", "\0\0\x60\0", 4), // sure of their values
-	// };
-  return 0;
+/**
+ * Return the number of bytes the tags will be serialized to.
+ */
+int tags_byte_size(const tag_info *tags, int num_tags)
+{
+	int data_length = 0;
+	for (int i = 0; i < num_tags; ++i) {
+		data_length += tags[i].value_len + 8;
+	}
+	return data_length;
 }
 
+int add_chlo_tags(void *buffer, int buffer_len)
+{
+	enum { NUM_TAGS = 9 };
+	tag_info tags[NUM_TAGS];
+
+	// Skip tags[0] which will be the padding tag
+	tags[1] = make_raw_tag("VER", "Q043", 4);
+	tags[2] = make_raw_tag("PDMD", "X509", 4);
+	tags[3] = make_uint32_tag("SMHL", 1);
+	tags[4] = make_uint32_tag("ICSL", 600);
+	tags[5] = make_uint32_tag("MIDS", 100);
+	tags[6] = make_uint32_tag("SCLS", 1);
+	tags[7] = make_raw_tag("CFCW", "\0\0\xf0\0", 4); // Use raw as im not
+	tags[8] = make_raw_tag("SFCW", "\0\0\x60\0", 4); // sure of their values
+
+	int padding_len =
+	    stream_frame_len - (tags_byte_size(&tags[1], NUM_TAGS - 1) +
+				chlo_preface_size + tag_len);
+	assert(padding_len > 0);
+	tags[0] = make_pad_tag(padding_len);
+
+	int size_to_write = tags_byte_size(tags, NUM_TAGS) + chlo_preface_size;
+	assert(size_to_write <= buffer_len);
+
+	int written = write_chlo(buffer, buffer_len, tags, NUM_TAGS);
+	assert(written == size_to_write);
+
+	return written;
+}
 
 int chlo_quic_init_perthread(void *buf, macaddr_t *src, macaddr_t *gw,
 			     __attribute__((unused)) port_h_t dst_port,
@@ -201,15 +248,15 @@ int chlo_quic_init_perthread(void *buf, macaddr_t *src, macaddr_t *gw,
 	make_eth_header(eth_header, src, gw);
 
 	struct ip *ip_header = (struct ip *)(&eth_header[1]);
-	uint16_t len = htons(sizeof(struct ip) + sizeof(struct udphdr)
-                       + chlo_udp_payload_size);
+	uint16_t len = htons(sizeof(struct ip) + sizeof(struct udphdr) +
+			     chlo_udp_payload_size);
 	make_ip_header(ip_header, IPPROTO_UDP, len);
 
 	struct udphdr *udp_header = (struct udphdr *)(&ip_header[1]);
 	make_udp_header(udp_header, zconf.target_port,
-                  sizeof(struct udphdr) + chlo_udp_payload_size);
+			sizeof(struct udphdr) + chlo_udp_payload_size);
 
-	char *udp_payload = (char *)(&udp_header[1]);
+	uint8_t *const udp_payload = (uint8_t *)(&udp_header[1]);
 
 	// Since nothing currently changes between client hellos, we can just
 	// initialize the payload data here.
@@ -217,12 +264,11 @@ int chlo_quic_init_perthread(void *buf, macaddr_t *src, macaddr_t *gw,
 	common_hdr->public_flags =
 	    PUBLIC_FLAG_HAS_VERS | PUBLIC_FLAG_8BYTE_CONN_ID;
 	common_hdr->connection_id = connection_id;
-	common_hdr->quic_version = htobe32(VER_Q043);
+	common_hdr->quic_version = VER_Q043;
 	common_hdr->seq_num = 1;
 	// Fill the hash later, but don't hash the hash itself
 	memset(common_hdr->fnv1a_hash, 0, sizeof(common_hdr->fnv1a_hash));
 
-	static const int stream_frame_len = 1024;
 	quic_stream_frame_packet *frame =
 	    (quic_stream_frame_packet *)(udp_payload + QUIC_HDR_LEN_WITH_HASH);
 	frame->type = FRAME_TYPE_STREAM | FRAME_STREAM_HAS_DATA |
@@ -230,14 +276,19 @@ int chlo_quic_init_perthread(void *buf, macaddr_t *src, macaddr_t *gw,
 	frame->stream_id = FRAME_STREAM_CRYPTO_STREAM;
 	frame->data_len = htobe16(stream_frame_len);
 
-  // TODO: Add the tags
+	int chlo_data_written =
+	    QUIC_HDR_LEN_WITH_HASH + sizeof(quic_stream_frame_packet);
+	uint8_t *chlo_tag_buffer = udp_payload + chlo_data_written;
+	add_chlo_tags(chlo_tag_buffer,
+		      chlo_udp_payload_size - chlo_data_written);
 
 	// hash the public header
-	__uint128_t hash = 0;
-	hash = fnv1a_128((uint8_t *)udp_payload, QUIC_HDR_LEN_BASE);
+	__uint128_t hash = fnv1a_128(udp_payload, QUIC_HDR_LEN_BASE);
 	// hash the payload frames, excluding the hash field itself
-	hash = fnv1a_128_inc(hash, (uint8_t *)udp_payload + QUIC_HDR_LEN_WITH_HASH,
-                       chlo_udp_payload_size - QUIC_HDR_LEN_WITH_HASH);
+	hash = fnv1a_128_inc(hash, udp_payload + QUIC_HDR_LEN_WITH_HASH,
+			     chlo_udp_payload_size - QUIC_HDR_LEN_WITH_HASH);
+	// For versions greater than 35, this includes the perspective "Client"
+	hash = fnv1a_128_inc(hash, (const uint8_t *)"Client", 6);
 
 	uint8_t serializedHash[12];
 	serializeHash(hash, serializedHash);
@@ -291,38 +342,50 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len,
 		// Verify that the UDP length is big enough for the header and at least one byte
 		uint16_t data_len = ntohs(udp->uh_ulen);
 		if (data_len > sizeof(struct udphdr)) {
-      int payload_len = data_len - sizeof(struct udphdr);
+			int payload_len = data_len - sizeof(struct udphdr);
 			uint8_t *payload = (uint8_t *)&udp[1];
 
 			if (payload_len > QUIC_HDR_LEN_BASE) {
-				quic_common_hdr *quic_header = ((quic_common_hdr *)payload);
+				quic_common_hdr *quic_header =
+				    ((quic_common_hdr *)payload);
 
-				if (quic_header->connection_id == connection_id) {
-					fs_add_string(fs, "classification", (char *)"quic", 0);
+				if (quic_header->connection_id ==
+				    connection_id) {
+					fs_add_string(fs, "classification",
+						      (char *)"quic", 0);
 					fs_add_uint64(fs, "success", 1);
 				}
 
 				// probably we got back a version packet
 				if (payload_len < chlo_udp_payload_size) {
-					quic_version_neg *vers = (quic_version_neg *)payload;
-					if ((vers->public_flags & PUBLIC_FLAG_HAS_VERS) > 0) {
+					quic_version_neg *vers =
+					    (quic_version_neg *)payload;
+					if ((vers->public_flags &
+					     PUBLIC_FLAG_HAS_VERS) > 0) {
 
 						// contains version flag
 						int num_versions =
-						    (data_len - sizeof(struct udphdr) - 8 - 1) / 4;
+						    (data_len -
+						     sizeof(struct udphdr) - 8 -
+						     1) /
+						    4;
 						if (num_versions > 0) {
 
 							// create a list of the versions
 							// 4 bytes each + , + [SPACE] + \0
 							char *versions = malloc(
-                  num_versions * sizeof( uint32_t) + (num_versions - 1) * 2 + 1);
+							    num_versions *
+								sizeof(
+								    uint32_t) +
+							    (num_versions - 1) *
+								2 +
+							    1);
 							int next_ver = 0;
 
-							if (*((uint32_t *)&vers ->versions
+							if (*((uint32_t *)&vers
+								  ->versions
 								      [0]) ==
-							    MakeQuicTag(
-								'Q', '0', '3',
-								'4')) {
+							    VER_Q043) {
 								// someone replied with our own version... probalby UDP echo
 								fs_modify_string(
 								    fs,
@@ -364,7 +427,6 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len,
 							fs_add_string(
 							    fs, "versions",
 							    versions, 1);
-							//fs_add_binary(fs, "versions", num_versions * sizeof(uint32_t), vers->versions, 0);
 						}
 					} else if ((vers->public_flags &
 						    PUBLIC_FLAG_HAS_RST) > 0) {
@@ -480,25 +542,6 @@ int pack_tags(const tag_info *tags, int num_tags, void *buffer, int buffer_len)
 	return offset + (num_tags * 8);
 }
 
-int write_chlo(void *buffer, int buffer_len, const tag_info *tags, int num_tags)
-{
-	const int kPrefaceSize = CHLO_PREFACE_SIZE;
-	assert(buffer_len >= kPrefaceSize);
-	assert(num_tags <= UINT16_MAX);
-
-	uint8_t *data_buffer = (uint8_t *)buffer;
-
-	memcpy(&data_buffer[0], "CHLO", 4);
-	*((uint16_t *)&data_buffer[4]) = htole16(num_tags);
-	memset(&data_buffer[6], 0, 2); // Padding
-
-	int tags_size = pack_tags(tags, num_tags, data_buffer + kPrefaceSize,
-				  buffer_len - kPrefaceSize);
-	assert(tags_size <= UINT16_MAX);
-
-	return kPrefaceSize + tags_size;
-}
-
 static fielddef_t fields[] = {
     {.name = "classification",
      .type = "string",
@@ -512,14 +555,11 @@ static fielddef_t fields[] = {
 probe_module_t module_quic_chlo = {
     .name = "quic_chlo",
     // we are resetting the actual packet length during initialization of the module
-    .packet_length = sizeof(struct ether_header) + sizeof(struct ip) +
-		     sizeof(struct udphdr) + QUIC_HDR_LEN_WITH_HASH +
-		     STREAM_FRAME_LEN + INCHOATE_CHLO_LEN +
-		     CLIENTHELLO_MIN_SIZE,
+    .packet_length = 0,
     // this gets replaced by the actual port during global init
     .pcap_filter = "udp",
     // this gets replaced by the actual payload we expect to get back
-    .pcap_snaplen = 1500,
+    .pcap_snaplen = 0,
     .port_args = 1,
     .thread_initialize = &chlo_quic_init_perthread,
     .global_initialize = &chlo_quic_global_initialize,

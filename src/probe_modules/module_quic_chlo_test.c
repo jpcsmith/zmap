@@ -16,18 +16,6 @@
 #include "unity.h"
 #include "probe_modules/module_quic_chlo.h"
 
-/**
- * Return the number of bytes the tags will be serialized to.
- */
-int tags_byte_size(const tag_info *tags, int num_tags)
-{
-	int data_length = 0;
-	for (int i = 0; i < num_tags; ++i) {
-		data_length += tags[i].value_len + 8;
-	}
-	return data_length;
-}
-
 void test_make_uint32_tag(void)
 {
 	tag_info tag = make_uint32_tag("MIDS", 100);
@@ -91,24 +79,24 @@ void test_pack_tags(void)
 	TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, buffer, write_count);
 }
 
-void test_write_chlo_stream_frame(void)
-{
-	uint8_t buffer[100];
-	uint8_t expected[36] = {
-	    0xa0, 0x01, 0x20, 0x00, 'C',  'H',  'L',  'O',  //
-	    0x02, 0x00, 0x00, 0x00,			    //
-	    'V',  'E',  'R',  0x00, 0x04, 0x00, 0x00, 0x00, //
-	    'M',  'I',  'D',  'S',  0x08, 0x00, 0x00, 0x00, //
-	    'Q',  '0',  '4',  '3',  0x64, 0x00, 0x00, 0x00};
-
-	tag_info tags[2] = {make_raw_tag("VER", "Q043", 4),
-			    make_uint32_tag("MIDS", 100)};
-
-	int write_count = write_chlo_stream_frame(buffer, 100, tags, 2);
-
-	TEST_ASSERT_EQUAL(36, write_count);
-	TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, buffer, write_count);
-}
+// void test_write_chlo_stream_frame(void)
+// {
+// 	uint8_t buffer[100];
+// 	uint8_t expected[36] = {
+// 	    0xa0, 0x01, 0x20, 0x00, 'C',  'H',  'L',  'O',  //
+// 	    0x02, 0x00, 0x00, 0x00,			    //
+// 	    'V',  'E',  'R',  0x00, 0x04, 0x00, 0x00, 0x00, //
+// 	    'M',  'I',  'D',  'S',  0x08, 0x00, 0x00, 0x00, //
+// 	    'Q',  '0',  '4',  '3',  0x64, 0x00, 0x00, 0x00};
+//
+// 	tag_info tags[2] = {make_raw_tag("VER", "Q043", 4),
+// 			    make_uint32_tag("MIDS", 100)};
+//
+// 	int write_count = write_chlo_stream_frame(buffer, 100, tags, 2);
+//
+// 	TEST_ASSERT_EQUAL(36, write_count);
+// 	TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, buffer, write_count);
+// }
 
 int main(void)
 {
@@ -118,6 +106,6 @@ int main(void)
 	RUN_TEST(test_make_raw_tag);
 	RUN_TEST(test_make_pad_tag);
 	RUN_TEST(test_pack_tags);
-	RUN_TEST(test_write_chlo_stream_frame);
+	// RUN_TEST(test_write_chlo_stream_frame);
 	return UNITY_END();
 }
