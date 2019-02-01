@@ -35,3 +35,9 @@ tag_info make_pad_tag(int length);
  * to the buffer.
  */
 int pack_tags(const tag_info *tags, int num_tags, void *buffer, int buffer_len);
+
+/**
+ * Returns the number of bytes written.
+ */
+int write_chlo_stream_frame(void *buffer, int buffer_len, const tag_info *tags,
+			    int num_tags);
