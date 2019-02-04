@@ -277,7 +277,6 @@ install(
     DESTINATION share/man/man1
 )
 
-option(MODULE_QUIC_CHLO_TEST "Build tests for the QUIC-CHLO module." OFF)
 
 
 if(MODULE_QUIC_CHLO_TEST)

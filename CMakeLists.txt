@@ -86,9 +86,12 @@ if(WITH_PFRING)
     set(PFRING_LIBRARIES pfring rt numa)
 endif()
 
-# Testing
-add_library(unity STATIC third-party/Unity/src/unity.c)
-target_include_directories(unity PUBLIC third-party/Unity/src)
+
+option(MODULE_QUIC_CHLO_TEST "Build tests for the QUIC-CHLO module." OFF)
+if (MODULE_QUIC_CHLO_TEST)
+    add_library(unity STATIC third-party/Unity/src/unity.c)
+    target_include_directories(unity PUBLIC third-party/Unity/src)
+endif(MODULE_QUIC_CHLO_TEST)
 
 # Standard FLAGS
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
