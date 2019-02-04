@@ -33,6 +33,6 @@ RUN apt-get -qqy install build-essential cmake libgmp3-dev gengetopt libpcap-dev
 # a running container and zmap will stop.
 RUN apt-get -qqy install python-dev python-pip
 RUN pip install dumb-init
-RUN wget -q https://github.com/zmap/${ZMAP_FORK}/archive/${ZMAP_COMMIT}.zip && unzip -q ${ZMAP_COMMIT}.zip && cd zmap-${ZMAP_COMMIT} && (cmake . && make -j4 && make install) 2>&1 > /dev/null
+RUN wget -q https://github.com/${ZMAP_FORK}/zmap/archive/${ZMAP_COMMIT}.zip && unzip -q ${ZMAP_COMMIT}.zip && cd zmap-${ZMAP_COMMIT} && (cmake . && make -j4 && make install) 2>&1 > /dev/null
 
 ENTRYPOINT ["dumb-init", "/usr/local/sbin/zmap"]
