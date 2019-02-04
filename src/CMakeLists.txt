@@ -277,6 +277,10 @@ install(
     DESTINATION share/man/man1
 )
 
+option(MODULE_QUIC_CHLO_TEST "Build tests for the QUIC-CHLO module." OFF)
+
+
+if(MODULE_QUIC_CHLO_TEST)
 add_executable(test_module_quic_chlo
     probe_modules/module_quic_chlo_test.c
     aesrand.c
@@ -315,3 +319,4 @@ target_link_libraries(test_module_quic_chlo
     unity
 )
 add_test(test_quic_chlo test_module_quic_chlo)
+endif(MODULE_QUIC_CHLO_TEST)
