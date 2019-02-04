@@ -144,7 +144,6 @@ int write_chlo(void *buffer, int buffer_len, const tag_info *tags, int num_tags)
 int chlo_quic_global_initialize(struct state_conf *conf)
 {
 	num_ports = conf->source_port_last - conf->source_port_first + 1;
-	assert(num_ports == 1);
 
 	sprintf(filter_rule, "udp src port %d", conf->target_port);
 	module_quic_chlo.pcap_filter = filter_rule;
