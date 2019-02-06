@@ -163,6 +163,8 @@ void block_sending_icmp_errors(const struct state_conf *conf) {
     if (bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) < 0) {
       log_fatal("quic_chlo::suppress", "Bind to UDP socket %d  failed (%d).",
                 port, errno);
+    } else {
+      log_info("quic_chlo::suppress", "Bound to UDP socket %d.", port);
     }
   }
 }
