@@ -342,6 +342,9 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len,
 		struct udphdr *udp =
 		    (struct udphdr *)((char *)ip_hdr + ip_hdr->ip_hl * 4);
 
+    fs_add_string(fs, "classification", (char *)"udp", 0);
+    fs_add_uint64(fs, "success", 0);
+
 		// Verify that the UDP length is big enough for the header and at least one byte
 		uint16_t data_len = ntohs(udp->uh_ulen);
 		if (data_len > sizeof(struct udphdr)) {
@@ -354,9 +357,8 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len,
 
 				if (quic_header->connection_id ==
 				    connection_id) {
-					fs_add_string(fs, "classification",
-						      (char *)"quic", 0);
-					fs_add_uint64(fs, "success", 1);
+					fs_modify_string(fs, "classification", (char *)"quic", 0);
+					fs_modify_uint64(fs, "success", 1);
 				}
 
 				// probably we got back a version packet
@@ -439,10 +441,7 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len,
 					}
 				}
 			}
-		} else {
-			fs_add_string(fs, "classification", (char *)"udp", 0);
-			fs_add_uint64(fs, "success", 0);
-		}
+    }
 	}
 }
 
