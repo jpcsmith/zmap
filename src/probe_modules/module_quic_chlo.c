@@ -17,6 +17,8 @@
 #include <assert.h>
 #include <stdint.h>
 #include <endian.h>
+#include <errno.h>
+#include <sys/socket.h>
 
 #include "../../lib/includes.h"
 #include "../../lib/xalloc.h"
@@ -141,12 +143,39 @@ int write_chlo(void *buffer, int buffer_len, const tag_info *tags, int num_tags)
 	return chlo_preface_size + tags_size;
 }
 
+
+
+void block_sending_icmp_errors(const struct state_conf *conf) {
+  for (port_h_t port = conf->source_port_first; port <= conf->source_port_last; ++port) {
+    // We will use this fd until the application exists, dont need to clean up
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    if (fd == -1) {
+      log_fatal("quic_chlo::suppress", "Create UDP socket to failed (%d).", errno);
+    }
+
+    struct sockaddr_in bind_addr;
+    memset((uint8_t*) &bind_addr, 0, sizeof(bind_addr));
+    bind_addr.sin_family = AF_INET;
+    bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    bind_addr.sin_port = htons(port);
+
+    if (bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) < 0) {
+      log_fatal("quic_chlo::suppress", "Bind to UDP socket %d  failed (%d).",
+                port, errno);
+    }
+  }
+}
+
 int chlo_quic_global_initialize(struct state_conf *conf)
 {
+  block_sending_icmp_errors(conf);
+
 	num_ports = conf->source_port_last - conf->source_port_first + 1;
 
 	sprintf(filter_rule, "udp src port %d", conf->target_port);
 	module_quic_chlo.pcap_filter = filter_rule;
+  log_info("quic_chlo", "Set filter rule to '%s'", filter_rule);
 
 	assert(TOTAL_PACKET_SIZE <= MAX_PACKET_SIZE);
 	module_quic_chlo.pcap_snaplen = TOTAL_PACKET_SIZE;
