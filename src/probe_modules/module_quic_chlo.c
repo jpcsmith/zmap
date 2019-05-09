@@ -19,6 +19,7 @@
 #include <endian.h>
 #include <errno.h>
 #include <sys/socket.h>
+#include <time.h>
 
 #include "../../lib/includes.h"
 #include "../../lib/xalloc.h"
@@ -143,20 +144,29 @@ int write_chlo(void *buffer, int buffer_len, const tag_info *tags, int num_tags)
 	return chlo_preface_size + tags_size;
 }
 
+uint64_t random_connection_id()
+{
+	uint32_t low_order = rand() & 0xffffffff;
+	uint64_t high_order = (uint64_t)(0x5343414e) << 32;
+	return htobe64(high_order | low_order);
+}
 
 int chlo_quic_global_initialize(struct state_conf *conf)
 {
+	// Initalize SRAND as it may be used in this module
+	srand(time(NULL));
+
 	num_ports = conf->source_port_last - conf->source_port_first + 1;
 
 	sprintf(filter_rule, "udp src port %d", conf->target_port);
 	module_quic_chlo.pcap_filter = filter_rule;
-  log_info("quic_chlo", "Set filter rule to '%s'", filter_rule);
+	log_info("quic_chlo", "Set filter rule to '%s'", filter_rule);
 
 	assert(TOTAL_PACKET_SIZE <= MAX_PACKET_SIZE);
 	module_quic_chlo.pcap_snaplen = TOTAL_PACKET_SIZE;
 	module_quic_chlo.packet_length = TOTAL_PACKET_SIZE;
 
-	connection_id = htobe64(0x5343414e4e494e47);
+	connection_id = random_connection_id();
 
 	checker_bitmap = pbm_init();
 
@@ -342,8 +352,8 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len,
 		struct udphdr *udp =
 		    (struct udphdr *)((char *)ip_hdr + ip_hdr->ip_hl * 4);
 
-    fs_add_string(fs, "classification", (char *)"udp", 0);
-    fs_add_uint64(fs, "success", 0);
+		fs_add_string(fs, "classification", (char *)"udp", 0);
+		fs_add_uint64(fs, "success", 0);
 
 		// Verify that the UDP length is big enough for the header and at least one byte
 		uint16_t data_len = ntohs(udp->uh_ulen);
@@ -357,7 +367,8 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len,
 
 				if (quic_header->connection_id ==
 				    connection_id) {
-					fs_modify_string(fs, "classification", (char *)"quic", 0);
+					fs_modify_string(fs, "classification",
+							 (char *)"quic", 0);
 					fs_modify_uint64(fs, "success", 1);
 				}
 
@@ -441,7 +452,7 @@ void chlo_quic_process_packet(const u_char *packet, UNUSED uint32_t len,
 					}
 				}
 			}
-    }
+		}
 	}
 }
 

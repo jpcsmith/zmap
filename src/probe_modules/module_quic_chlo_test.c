@@ -9,7 +9,7 @@
 
 /* Test module for GQUIC enumeration via module_quic_chlo */
 #include <stdlib.h>
-
+#include <endian.h>
 #include <assert.h>
 #include <string.h>
 
@@ -98,6 +98,24 @@ void test_pack_tags(void)
 // 	TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, buffer, write_count);
 // }
 
+void test_random_connection_id(void)
+{
+	srand(1);
+	uint64_t connection_id = random_connection_id();
+
+	// It should have the high-order bits being SCAN when
+	TEST_ASSERT_EQUAL(0x5343414e, be64toh(connection_id) >> 32);
+
+	// It should not return the same value for 2 different calls.
+	TEST_ASSERT_NOT_EQUAL(connection_id, random_connection_id());
+
+	// Different SRAND seeds should return different values.
+	srand(1); // Resetting the seed to 1
+	TEST_ASSERT_EQUAL(connection_id, random_connection_id());
+	srand(2); // Resetting the seed to 2
+	TEST_ASSERT_NOT_EQUAL(connection_id, random_connection_id());
+}
+
 int main(void)
 {
 	UNITY_BEGIN();
@@ -106,6 +124,7 @@ int main(void)
 	RUN_TEST(test_make_raw_tag);
 	RUN_TEST(test_make_pad_tag);
 	RUN_TEST(test_pack_tags);
+	RUN_TEST(test_random_connection_id);
 	// RUN_TEST(test_write_chlo_stream_frame);
 	return UNITY_END();
 }

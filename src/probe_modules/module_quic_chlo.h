@@ -41,3 +41,9 @@ int pack_tags(const tag_info *tags, int num_tags, void *buffer, int buffer_len);
  */
 int write_chlo_stream_frame(void *buffer, int buffer_len, const tag_info *tags,
 			    int num_tags);
+
+/**
+ * Returns a random connection id already placed in network order. The 4
+ * high-order bytes of the connection ID will be the ASCII chars "SCAN".
+ */
+uint64_t random_connection_id();
